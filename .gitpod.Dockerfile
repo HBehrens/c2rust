@@ -21,7 +21,7 @@ RUN apt-get update && \
 USER gitpod
 
 COPY --chown=gitpod:gitpod ${DOCKER_CONTEXT_SOURCE}/scripts/requirements.txt /tmp/c2rust_requirements.txt
-RUN pip3 install -r $/tmp/c2rust_requirements.txt --disable-pip-version-check
+RUN pip3 install -r /tmp/c2rust_requirements.txt --disable-pip-version-check
 
 RUN luarocks path > /etc/profile.d/luarocks-path.sh
 RUN luarocks install penlight
