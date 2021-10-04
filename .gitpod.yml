@@ -5,4 +5,5 @@ image:
 
 tasks:
   - init: >
+      rustup component add rustfmt rustc-dev &&
       cargo build --release
