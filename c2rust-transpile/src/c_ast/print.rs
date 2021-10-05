@@ -106,14 +106,25 @@ impl<W: Write> Printer<W> {
 
             Some(&CExprKind::OffsetOf(_, ref kind)) => match kind {
                 OffsetOfKind::Constant(val) => self.writer.write_fmt(format_args!("{}", val)),
-                OffsetOfKind::Variable(qty, decl_id, expr_id) => {
+                OffsetOfKind::Variable(qty, components) => {
                     self.writer.write_all(b"offset_of!(")?;
                     self.print_qtype(*qty, None, context)?;
                     self.writer.write_all(b", ")?;
-                    self.print_decl_name(*decl_id, context)?;
-                    self.writer.write_all(b"[")?;
-                    self.print_expr(*expr_id, context)?;
-                    self.writer.write_all(b"])")?;
+                    for (idx, component) in components.iter().enumerate() {
+                        match component {
+                            OffsetOfVariableComponent::Field(decl_id) => {
+                                if idx != 0 {
+                                    self.writer.write_all(b".")?;
+                                }
+                                self.print_decl_name(*decl_id, context)?;
+                            },
+                            OffsetOfVariableComponent::Index(expr_id) => {
+                                self.writer.write_all(b"[")?;
+                                self.print_expr(*expr_id, context)?;
+                                self.writer.write_all(b"])")?;
+                            }
+                        }
+                    }
 
                     Ok(())
                 }

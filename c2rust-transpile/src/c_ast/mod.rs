@@ -995,7 +995,14 @@ pub enum OffsetOfKind {
     /// Contains more information to generate
     /// an offset_of! macro invocation
     /// Struct Type, Field Decl Id, Index Expr
-    Variable(CQualTypeId, CDeclId, CExprId),
+    Variable(CQualTypeId, Vec<OffsetOfVariableComponent>),
+}
+
+/// A single component inside variable OffsetOf
+#[derive(Debug, Clone)]
+pub enum OffsetOfVariableComponent {
+    Index(CExprId),
+    Field(CDeclId),
 }
 
 /// Represents an expression in C (6.5 Expressions)

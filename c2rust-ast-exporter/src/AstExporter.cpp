@@ -1263,25 +1263,37 @@ class TranslateASTVisitor final
                     // field, and array input expr
                     auto ty = E->getTypeSourceInfo()->getType();
                     auto qt = typeEncoder.encodeQualType(ty);
-
-                    assert(E->getNumComponents() == 2 &&
-                           "Found unsupported number of offsetof components");
-
-                    auto component0 = E->getComponent(0);
-                    auto component1 = E->getComponent(1);
-
-                    assert(component0.getKind() == 1 &&
-                           "Found unsupported offsetof component kind");
-                    assert(component1.getKind() == 0 &&
-                           "Found unsupported offsetof component kind");
-
-                    auto field = component0.getField()->getCanonicalDecl();
-                    auto expr0 = E->getIndexExpr(0);
-
                     cbor_encode_null(extras);
                     cbor_encode_uint(extras, qt);
-                    cbor_encode_uint(extras, uintptr_t(field));
-                    cbor_encode_uint(extras, uintptr_t(expr0));
+
+                    assert(E->getNumComponents() >= 2 &&
+                           "Found unsupported number of offsetof components");
+
+                    // .getIndexExpr() does not share the same index as .getComponent() so
+                    // we maintain an indepdented cursor iIndexExpr
+                    unsigned int iIndexExpr = 0;
+                    for (auto i = 0; i < E->getNumComponents(); i++) {
+                        auto component = E->getComponent(i);
+                        auto kind = component.getKind();
+                        cbor_encode_uint(extras, kind);
+                        switch (kind) {
+                            case 0: {
+                                auto indexExpr = E->getIndexExpr(iIndexExpr);
+                                cbor_encode_uint(extras, uintptr_t(indexExpr));
+                                iIndexExpr++;
+                                break;
+                            }
+                            case 1: {
+                                auto field = component.getField()->getCanonicalDecl();
+                                cbor_encode_uint(extras, uintptr_t(field));
+                                break;
+                            }
+                            default: {
+                                printError("Encountered unsupported component kind", E);
+                                abort();
+                            }
+                        }
+                    }
                 }
             });
 

@@ -3225,7 +3225,7 @@ impl<'c> Translation<'c> {
                 OffsetOfKind::Constant(val) => {
                     Ok(WithStmts::new_val(self.mk_int_lit(ty, *val, IntBase::Dec)?))
                 }
-                OffsetOfKind::Variable(qty, field_id, expr_id) => {
+                OffsetOfKind::Variable(qty, components) => {
                     self.use_crate(ExternCrate::Memoffset);
 
                     // Struct Type
@@ -3241,32 +3241,44 @@ impl<'c> Translation<'c> {
                     let name = self.resolve_decl_inner_name(decl_id);
                     let ty_ident = Nonterminal::NtIdent(mk().ident(name), false);
 
-                    // Field name
-                    let field_name = self
-                        .type_converter
-                        .borrow()
-                        .resolve_field_name(None, *field_id)
-                        .expect("Did not find name for offsetof struct field");
-                    let field_ident = Nonterminal::NtIdent(mk().ident(field_name), false);
-
-                    // Index Expr
-                    let expr = self.convert_expr(ctx, *expr_id)?
-                        .to_pure_expr()
-                        .ok_or_else(|| {
-                            format_err!("Expected Variable offsetof to be a side-effect free")
-                        })?;
-                    let expr = mk().cast_expr(expr, mk().ident_ty("usize"));
-                    let index_expr = Nonterminal::NtExpr(expr);
-
-                    // offset_of!(Struct, field[expr as usize]) as ty
-                    let macro_body = vec![
+                    let mut macro_body = vec![
                         TokenTree::token(token::Interpolated(Rc::new(ty_ident)), DUMMY_SP),
                         TokenTree::token(token::Comma, DUMMY_SP),
-                        TokenTree::token(token::Interpolated(Rc::new(field_ident)), DUMMY_SP),
-                        TokenTree::token(token::OpenDelim(DelimToken::Bracket), DUMMY_SP),
-                        TokenTree::token(token::Interpolated(Rc::new(index_expr)), DUMMY_SP),
-                        TokenTree::token(token::CloseDelim(DelimToken::Bracket), DUMMY_SP),
                     ];
+
+                    for (idx, component) in components.iter().enumerate() {
+                        match component {
+                            OffsetOfVariableComponent:: Field(field_id) => {
+                                let field_name = self
+                                    .type_converter
+                                    .borrow()
+                                    .resolve_field_name(None, *field_id)
+                                    .expect("Did not find name for offsetof struct field");
+                                let field_ident = Nonterminal::NtIdent(mk().ident(field_name), false);
+
+                                if idx != 0 {
+                                    macro_body.push(TokenTree::token(token::Dot, DUMMY_SP));    
+                                }
+                                macro_body.push(TokenTree::token(token::Interpolated(Rc::new(field_ident)), DUMMY_SP));
+                            },
+                            OffsetOfVariableComponent:: Index(expr_id) => {
+                                let expr = self.convert_expr(ctx, *expr_id)?
+                                    .to_pure_expr()
+                                    .ok_or_else(|| {
+                                        format_err!("Expected Variable offsetof to be a side-effect free")
+                                    })?;
+                                let expr = mk().cast_expr(expr, mk().ident_ty("usize"));
+                                let index_expr = Nonterminal::NtExpr(expr);
+                                macro_body.append(&mut vec![
+                                    TokenTree::token(token::OpenDelim(DelimToken::Bracket), DUMMY_SP),
+                                    TokenTree::token(token::Interpolated(Rc::new(index_expr)), DUMMY_SP),
+                                    TokenTree::token(token::CloseDelim(DelimToken::Bracket), DUMMY_SP),
+                                ]);
+                            },
+                        }
+                    }
+
+                    // offset_of!(Struct, a.b[c as usize].d.e[f as usize].g]) as ty
                     let path = mk().path("offset_of");
                     let mac = mk().mac_expr(mk().mac(path, macro_body, MacDelimiter::Parenthesis));
 

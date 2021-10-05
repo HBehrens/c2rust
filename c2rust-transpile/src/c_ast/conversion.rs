@@ -1091,13 +1091,35 @@ impl ConversionContext {
                         let qty_int = from_value(node.extras[1].clone())
                             .expect("Expected offset of to have struct type");
                         let qty = self.visit_qualified_type(qty_int);
-                        let field = from_value(node.extras[2].clone()).expect("Expected offset of field");
-                        let field_id = self.visit_decl(field);
-                        let index = from_value(node.extras[3].clone())
-                            .expect("Expected offset of index expr");
-                        let index_expr_id = self.visit_expr(index);
-                        let kind = OffsetOfKind::Variable(qty, field_id, index_expr_id);
 
+                        // extras contains sequence of ints that pairwise represent components
+                        // [null, qty, kind_0, value_0, kind_1, value_1, ..., kind_n, value_n]
+                        //    idx 2 ----^
+                        let kinds = node.extras[2..]
+                            .iter()
+                            .step_by(2)
+                            .map(|v| from_value::<u8>(v.clone()).expect("component kind"));
+                        let values = node.extras[3..]
+                            .iter()
+                            .step_by(2)
+                            .map(|v| from_value::<ClangId>(v.clone()).expect("component value"));
+
+                        let components = kinds
+                            .zip(values)
+                            .map(|(kind, value)| match kind {
+                                0 => {
+                                    let index_expr_id = self.visit_expr(value);
+                                    OffsetOfVariableComponent::Index(index_expr_id)
+                                }
+                                1 => {
+                                    let field_decl_id = self.visit_decl(value);
+                                    OffsetOfVariableComponent::Field(field_decl_id)
+                                }
+                                _ => panic!("Invalid value {} for kind", kind),
+                            })
+                            .collect::<Vec<_>>();
+
+                        let kind = OffsetOfKind::Variable(qty, components);
                         CExprKind::OffsetOf(ty, kind)
                     };
 
